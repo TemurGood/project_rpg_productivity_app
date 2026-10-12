@@ -8,6 +8,8 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@500;700;900&family=Rajdhani:wght@500;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="style.css" />
+  <!-- Supabase CDN Client -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
 <body>
   <div class="scanline-overlay"></div>
@@ -17,9 +19,10 @@
     <header class="hud-header panel">
       <div class="brand">
         <span class="glitch-title" data-text="CYBERQUEST">CYBERQUEST</span>
-        <span class="system-tag">v1.0.0 // PROTOCOL_ONLINE</span>
+        <span class="system-tag" id="auth-status-tag">GUEST PROTOCOL // LOCAL ONLY</span>
       </div>
       <div class="system-actions">
+        <button id="btn-auth-toggle" class="btn btn-secondary">⚡ CLOUD SYNC / LOGIN</button>
         <button id="btn-save-data" class="btn btn-secondary">SAVE</button>
         <button id="btn-reset-data" class="btn btn-danger">RESET SYSTEM</button>
       </div>
@@ -45,7 +48,6 @@
         </div>
 
         <div class="vitals">
-          <!-- Level & XP -->
           <div class="vital-row">
             <div class="vital-label">
               <span>LEVEL <strong id="hero-level">1</strong></span>
@@ -56,7 +58,6 @@
             </div>
           </div>
 
-          <!-- HP Bar -->
           <div class="vital-row">
             <div class="vital-label">
               <span>HEALTH</span>
@@ -68,7 +69,6 @@
           </div>
         </div>
 
-        <!-- Currency & Unallocated Stats -->
         <div class="hero-currency">
           <div class="currency-card">
             <span class="currency-label">CREDITS (GOLD)</span>
@@ -80,7 +80,6 @@
           </div>
         </div>
 
-        <!-- Attributes Panel -->
         <div class="attributes-block">
           <h4>ATTRIBUTES</h4>
           <ul class="stats-list">
@@ -116,7 +115,6 @@
           <span class="sub-text">DAILY DIRECTIVES</span>
         </div>
 
-        <!-- Quest Input Form -->
         <form id="quest-form" class="quest-form">
           <div class="form-row">
             <input 
@@ -143,17 +141,12 @@
           </div>
         </form>
 
-        <!-- Quest List -->
         <div class="quest-sections">
           <h3>PENDING OPERATIONS</h3>
-          <ul id="quest-list-active" class="quest-list">
-            <li class="quest-item empty-state">No active contracts found. Deploy one above.</li>
-          </ul>
+          <ul id="quest-list-active" class="quest-list"></ul>
 
           <h3>COMPLETED LOG</h3>
-          <ul id="quest-list-completed" class="quest-list completed-list">
-            <!-- Completed items populate here -->
-          </ul>
+          <ul id="quest-list-completed" class="quest-list completed-list"></ul>
         </div>
       </section>
 
@@ -163,33 +156,34 @@
           <h2>BLACK MARKET DEPOT</h2>
           <span class="sub-text">EXCHANGE CREDITS</span>
         </div>
-
-        <div class="shop-grid" id="shop-items">
-          <!-- Sample shop cards (wired dynamically in Step 5) -->
-          <article class="shop-card">
-            <div class="shop-card-info">
-              <h4>SYNTH-STIM VIAL</h4>
-              <p>Restores 25 HP</p>
-            </div>
-            <div class="shop-card-action">
-              <span class="price">⬡ 20</span>
-              <button class="btn btn-buy">BUY</button>
-            </div>
-          </article>
-
-          <article class="shop-card">
-            <div class="shop-card-info">
-              <h4>NEURAL OVERCLOCK</h4>
-              <p>+1 Stat Point instantly</p>
-            </div>
-            <div class="shop-card-action">
-              <span class="price">⬡ 75</span>
-              <button class="btn btn-buy">BUY</button>
-            </div>
-          </article>
-        </div>
+        <div class="shop-grid" id="shop-items"></div>
       </section>
     </main>
+  </div>
+
+  <!-- Cyberpunk Auth Modal -->
+  <div id="auth-modal" class="modal-overlay">
+    <div class="modal-panel">
+      <div class="modal-header">
+        <h3 id="modal-title">NEURAL LINK // AUTH</h3>
+        <button id="modal-close" class="btn-close">✕</button>
+      </div>
+      <form id="auth-form" class="auth-form">
+        <div class="form-group">
+          <label for="auth-email">OPERATIVE IDENTIFIER (EMAIL)</label>
+          <input type="email" id="auth-email" required placeholder="agent@cyberquest.net" />
+        </div>
+        <div class="form-group">
+          <label for="auth-password">CIPHER KEY (PASSWORD)</label>
+          <input type="password" id="auth-password" required placeholder="••••••••" minlength="6" />
+        </div>
+        <div id="auth-error-msg" class="auth-error"></div>
+        <div class="modal-actions">
+          <button type="button" id="btn-submit-login" class="btn btn-primary">LOG IN</button>
+          <button type="button" id="btn-submit-signup" class="btn btn-secondary">REGISTER NEW</button>
+        </div>
+      </form>
+    </div>
   </div>
 
   <script src="app.js"></script>

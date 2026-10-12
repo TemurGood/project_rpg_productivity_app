@@ -1,10 +1,19 @@
 /**
- * CYBERQUEST - RPG Habit Tracker
- * Architecture: gameState -> Storage -> RPGSystem -> UIController
+ * CYBERQUEST - Fullstack RPG Habit Tracker
+ * Architecture: Supabase Auth/DB <-> Storage <-> RPGSystem <-> UIController
  */
 
 // ==========================================
-// DEFAULT STATE TEMPLATE
+// 1. SUPABASE CLIENT CONFIGURATION
+// ==========================================
+const SUPABASE_URL = "https://fkgtxmqymhcyhuivctfc.supabase.co";
+const SUPABASE_ANON_KEY = "sb_publishable_j9M9R-fUI6Y6nqWUqW7Z-g_0FF3j1vb";
+
+// Initialize Supabase client
+const supabaseClient = window.supabase ? window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY) : null;
+
+// ==========================================
+// 2. STATE MODULE (gameState)
 // ==========================================
 const DEFAULT_STATE = {
   hero: {
@@ -32,7 +41,7 @@ const DEFAULT_STATE = {
       xpReward: 25,
       goldReward: 10,
       completed: false,
-      createdAt: 1700000000000
+      createdAt: Date.now()
     },
     {
       id: "demo-quest-2",
@@ -42,7 +51,7 @@ const DEFAULT_STATE = {
       xpReward: 50,
       goldReward: 25,
       completed: false,
-      createdAt: 1700000000001
+      createdAt: Date.now()
     }
   ],
   shopItems: [
@@ -67,7 +76,7 @@ const DEFAULT_STATE = {
     {
       id: "coffee-ration",
       name: "ESPRESSO RATION",
-      desc: "Voucher: 1 Guilt-free artisanal coffee break",
+      desc: "Voucher: 1 Guilt-free coffee break",
       price: 30,
       type: "reward",
       effect: "voucher"
@@ -75,7 +84,7 @@ const DEFAULT_STATE = {
     {
       id: "holonet-pass",
       name: "HOLONET ACCESS (1 HR)",
-      desc: "Voucher: 1 Hour of gaming or leisure",
+      desc: "Voucher: 1 Hour gaming or leisure",
       price: 90,
       type: "reward",
       effect: "voucher"
@@ -84,64 +93,143 @@ const DEFAULT_STATE = {
   inventory: []
 };
 
-// ==========================================
-// 1. STATE CONTAINER (gameState)
-// ==========================================
 let gameState = JSON.parse(JSON.stringify(DEFAULT_STATE));
+let currentUser = null;
 
 // ==========================================
-// 2. STORAGE MODULE (Storage)
+// 3. STORAGE & CLOUD MODULE (Storage)
 // ==========================================
 const Storage = {
-  KEY: "CYBERQUEST_PROGRESS_DATA_V1",
+  LOCAL_KEY: "CYBERQUEST_PROGRESS_DATA_V1",
 
-  save() {
+  // Save to LocalStorage AND Cloud (if logged in)
+  async save() {
+    // 1. Always save locally for instant offline performance
     try {
-      localStorage.setItem(this.KEY, JSON.stringify(gameState));
-      return true;
-    } catch (err) {
-      console.error("Storage save failed:", err);
-      return false;
+      localStorage.setItem(this.LOCAL_KEY, JSON.stringify(gameState));
+    } catch (e) {
+      console.warn("Local storage write error:", e);
+    }
+
+    // 2. If logged in to Supabase, sync to cloud database
+    if (currentUser && supabaseClient) {
+      try {
+        const { error } = await supabaseClient
+          .from("player_saves")
+          .upsert({
+            user_id: currentUser.id,
+            game_data: gameState,
+            updated_at: new Date().toISOString()
+          });
+
+        if (error) console.error("Cloud sync error:", error);
+      } catch (err) {
+        console.error("Cloud sync network error:", err);
+      }
     }
   },
 
-  load() {
+  // Load from Cloud if logged in, otherwise load from LocalStorage
+  async load() {
+    if (currentUser && supabaseClient) {
+      try {
+        const { data, error } = await supabaseClient
+          .from("player_saves")
+          .select("game_data")
+          .eq("user_id", currentUser.id)
+          .single();
+
+        if (data && data.game_data) {
+          gameState = {
+            ...DEFAULT_STATE,
+            ...data.game_data,
+            shopItems: DEFAULT_STATE.shopItems
+          };
+          return true;
+        }
+      } catch (err) {
+        console.warn("No remote save found, using default or local.");
+      }
+    }
+
+    // Fallback: LocalStorage
     try {
-      const serialized = localStorage.getItem(this.KEY);
+      const serialized = localStorage.getItem(this.LOCAL_KEY);
       if (!serialized) return false;
 
       const loaded = JSON.parse(serialized);
-      // Merge with default state structure to prevent missing properties
       gameState = {
         ...DEFAULT_STATE,
         ...loaded,
-        hero: { ...DEFAULT_STATE.hero, ...loaded.hero },
-        quests: loaded.quests || [],
-        inventory: loaded.inventory || [],
         shopItems: DEFAULT_STATE.shopItems
       };
       return true;
     } catch (err) {
-      console.error("Storage load failed, reverting to default:", err);
       gameState = JSON.parse(JSON.stringify(DEFAULT_STATE));
       return false;
     }
   },
 
-  reset() {
-    try {
-      localStorage.removeItem(this.KEY);
-      gameState = JSON.parse(JSON.stringify(DEFAULT_STATE));
-      return true;
-    } catch (err) {
-      console.error("Storage reset failed:", err);
-      return false;
+  async reset() {
+    localStorage.removeItem(this.LOCAL_KEY);
+    gameState = JSON.parse(JSON.stringify(DEFAULT_STATE));
+
+    if (currentUser && supabaseClient) {
+      await supabaseClient.from("player_saves").delete().eq("user_id", currentUser.id);
     }
   }
 };
 
 // ==========================================
-// 3. RPG LOGIC MODULE (RPGSystem)
+// 4. AUTH MODULE (AuthService)
+// ==========================================
+const AuthService = {
+  async init() {
+    if (!supabaseClient) return;
+
+    // Check existing active session
+    const { data: { session } } = await supabaseClient.auth.getSession();
+    if (session?.user) {
+      currentUser = session.user;
+      await Storage.load();
+    }
+
+    // Listen for auth state changes (login, logout)
+    supabaseClient.auth.onAuthStateChange(async (event, session) => {
+      currentUser = session?.user || null;
+      UIController.updateAuthUI();
+      if (currentUser) {
+        await Storage.load();
+        UIController.renderAll();
+      }
+    });
+
+    UIController.updateAuthUI();
+  },
+
+  async signUp(email, password) {
+    if (!supabaseClient) return { error: { message: "Supabase client uninitialized." } };
+    return await supabaseClient.auth.signUp({ email, password });
+  },
+
+  async signIn(email, password) {
+    if (!supabaseClient) return { error: { message: "Supabase client uninitialized." } };
+    return await supabaseClient.auth.signInWithPassword({ email, password });
+  },
+
+  async signOut() {
+    if (!supabaseClient) return;
+    await supabaseClient.auth.signOut();
+    currentUser = null;
+    gameState = JSON.parse(JSON.stringify(DEFAULT_STATE));
+    Storage.load(); // Load local save
+    UIController.renderAll();
+    UIController.showToast("LOGGED OUT: Switched to Guest Protocol.");
+  }
+};
+
+// ==========================================
+// 5. RPG LOGIC MODULE (RPGSystem)
 // ==========================================
 const RPGSystem = {
   difficultyRewards: {
@@ -206,7 +294,6 @@ const RPGSystem = {
     UIController.renderAll();
   },
 
-  // Quests
   createQuest(title, difficulty, category) {
     const rewards = this.difficultyRewards[difficulty] || this.difficultyRewards.medium;
     const newQuest = {
@@ -232,8 +319,6 @@ const RPGSystem = {
     quest.completed = true;
     this.addXP(quest.xpReward);
     this.addGold(quest.goldReward);
-    Storage.save();
-    UIController.renderQuests();
   },
 
   deleteQuest(questId) {
@@ -242,7 +327,6 @@ const RPGSystem = {
     UIController.renderQuests();
   },
 
-  // Shop
   buyItem(itemId) {
     const item = gameState.shopItems.find(i => i.id === itemId);
     if (!item) return;
@@ -271,7 +355,7 @@ const RPGSystem = {
 };
 
 // ==========================================
-// 4. UI RENDERING MODULE (UIController)
+// 6. UI RENDERING MODULE (UIController)
 // ==========================================
 const UIController = {
   elements: {
@@ -297,9 +381,19 @@ const UIController = {
     completedQuestList: document.getElementById("quest-list-completed"),
     // Shop
     shopContainer: document.getElementById("shop-items"),
-    // System Header Buttons
+    // System controls
     btnSave: document.getElementById("btn-save-data"),
-    btnReset: document.getElementById("btn-reset-data")
+    btnReset: document.getElementById("btn-reset-data"),
+    btnAuthToggle: document.getElementById("btn-auth-toggle"),
+    authStatusTag: document.getElementById("auth-status-tag"),
+    // Auth Modal
+    authModal: document.getElementById("auth-modal"),
+    modalClose: document.getElementById("modal-close"),
+    authEmail: document.getElementById("auth-email"),
+    authPassword: document.getElementById("auth-password"),
+    authErrorMsg: document.getElementById("auth-error-msg"),
+    btnSubmitLogin: document.getElementById("btn-submit-login"),
+    btnSubmitSignup: document.getElementById("btn-submit-signup")
   },
 
   showToast(message, isDanger = false) {
@@ -309,21 +403,29 @@ const UIController = {
       toast.className = "system-toast";
       document.body.appendChild(toast);
     }
-
     toast.textContent = `// ${message}`;
     toast.className = isDanger ? "system-toast danger" : "system-toast";
     toast.style.display = "block";
+    setTimeout(() => { toast.style.display = "none"; }, 3000);
+  },
 
-    setTimeout(() => {
-      toast.style.display = "none";
-    }, 3000);
+  updateAuthUI() {
+    if (currentUser) {
+      this.elements.authStatusTag.textContent = `LINKED: ${currentUser.email}`;
+      this.elements.authStatusTag.style.color = "var(--accent-green)";
+      this.elements.btnAuthToggle.textContent = "LOG OUT";
+    } else {
+      this.elements.authStatusTag.textContent = "GUEST PROTOCOL // LOCAL ONLY";
+      this.elements.authStatusTag.style.color = "var(--text-muted)";
+      this.elements.btnAuthToggle.textContent = "⚡ CLOUD SYNC / LOGIN";
+    }
   },
 
   renderHeroProfile() {
     const hero = gameState.hero;
     const el = this.elements;
 
-    el.heroName.textContent = hero.name;
+    el.heroName.textContent = currentUser ? currentUser.email.split("@")[0].toUpperCase() : hero.name;
     el.heroClass.textContent = hero.class;
     el.heroLevel.textContent = hero.level;
     
@@ -342,8 +444,8 @@ const UIController = {
     el.statInt.textContent = hero.stats.int;
     el.statAgi.textContent = hero.stats.agi;
 
-    el.statIncButtons.forEach(button => {
-      button.disabled = hero.statPoints <= 0;
+    el.statIncButtons.forEach(btn => {
+      btn.disabled = hero.statPoints <= 0;
     });
   },
 
@@ -352,9 +454,7 @@ const UIController = {
     const completedQuests = gameState.quests.filter(q => q.completed);
 
     if (activeQuests.length === 0) {
-      this.elements.activeQuestList.innerHTML = `
-        <li class="quest-item empty-state">No active contracts found. Deploy one above.</li>
-      `;
+      this.elements.activeQuestList.innerHTML = `<li class="quest-item empty-state">No active contracts found. Deploy one above.</li>`;
     } else {
       this.elements.activeQuestList.innerHTML = activeQuests.map(q => `
         <li class="quest-item" data-id="${q.id}">
@@ -375,9 +475,7 @@ const UIController = {
     }
 
     if (completedQuests.length === 0) {
-      this.elements.completedQuestList.innerHTML = `
-        <li class="quest-item empty-state">No contracts completed yet today.</li>
-      `;
+      this.elements.completedQuestList.innerHTML = `<li class="quest-item empty-state">No contracts completed yet today.</li>`;
     } else {
       this.elements.completedQuestList.innerHTML = completedQuests.map(q => `
         <li class="quest-item" data-id="${q.id}">
@@ -398,7 +496,6 @@ const UIController = {
 
   renderShop() {
     const heroGold = gameState.hero.gold;
-
     this.elements.shopContainer.innerHTML = gameState.shopItems.map(item => {
       const canAfford = heroGold >= item.price;
       return `
@@ -409,11 +506,7 @@ const UIController = {
           </div>
           <div class="shop-card-action">
             <span class="price">⬡ ${item.price}</span>
-            <button 
-              class="btn btn-buy" 
-              data-id="${item.id}"
-              ${!canAfford ? "disabled" : ""}
-            >
+            <button class="btn btn-buy" data-id="${item.id}" ${!canAfford ? "disabled" : ""}>
               ${canAfford ? "BUY" : "LOCKED"}
             </button>
           </div>
@@ -433,9 +526,7 @@ const UIController = {
     }
 
     if (gameState.inventory.length === 0) {
-      invContainer.innerHTML = `
-        <span class="sub-text">OPERATIVE BAG: Empty</span>
-      `;
+      invContainer.innerHTML = `<span class="sub-text">OPERATIVE BAG: Empty</span>`;
     } else {
       invContainer.innerHTML = `
         <span class="sub-text">CLAIMED VOUCHERS (${gameState.inventory.length}):</span>
@@ -451,14 +542,14 @@ const UIController = {
     this.renderQuests();
     this.renderShop();
     this.renderInventory();
+    this.updateAuthUI();
   },
 
   initListeners() {
     // Stat allocations
-    this.elements.statIncButtons.forEach(button => {
-      button.addEventListener("click", (e) => {
-        const stat = e.currentTarget.getAttribute("data-stat");
-        RPGSystem.allocateStatPoint(stat);
+    this.elements.statIncButtons.forEach(btn => {
+      btn.addEventListener("click", (e) => {
+        RPGSystem.allocateStatPoint(e.currentTarget.getAttribute("data-stat"));
       });
     });
 
@@ -466,75 +557,103 @@ const UIController = {
     this.elements.questForm.addEventListener("submit", (e) => {
       e.preventDefault();
       const title = this.elements.questTitleInput.value.trim();
-      const difficulty = this.elements.questDifficultyInput.value;
-      const category = this.elements.questCategoryInput.value;
-
       if (!title) return;
-
-      RPGSystem.createQuest(title, difficulty, category);
+      RPGSystem.createQuest(title, this.elements.questDifficultyInput.value, this.elements.questCategoryInput.value);
       this.elements.questTitleInput.value = "";
     });
 
-    // Quest actions
+    // Quest Actions
     const handleQuestAction = (e) => {
-      const target = e.target;
-      const action = target.getAttribute("data-action");
-      const id = target.getAttribute("data-id");
-
+      const action = e.target.getAttribute("data-action");
+      const id = e.target.getAttribute("data-id");
       if (!action || !id) return;
-
-      if (action === "complete") {
-        RPGSystem.completeQuest(id);
-      } else if (action === "delete") {
-        RPGSystem.deleteQuest(id);
-      }
+      if (action === "complete") RPGSystem.completeQuest(id);
+      if (action === "delete") RPGSystem.deleteQuest(id);
     };
-
     this.elements.activeQuestList.addEventListener("click", handleQuestAction);
     this.elements.completedQuestList.addEventListener("click", handleQuestAction);
 
-    // Shop Buy
+    // Shop purchase
     this.elements.shopContainer.addEventListener("click", (e) => {
       if (e.target.classList.contains("btn-buy")) {
-        const itemId = e.target.getAttribute("data-id");
-        RPGSystem.buyItem(itemId);
+        RPGSystem.buyItem(e.target.getAttribute("data-id"));
       }
     });
 
-    // Manual Save Button
-    this.elements.btnSave.addEventListener("click", () => {
-      if (Storage.save()) {
-        this.showToast("SYSTEM BACKUP: All progress saved to local storage.");
-      }
+    // Save button
+    this.elements.btnSave.addEventListener("click", async () => {
+      await Storage.save();
+      this.showToast(currentUser ? "CLOUD BACKUP: Synchronized with Supabase DB." : "LOCAL BACKUP: Saved to browser storage.");
     });
 
-    // Reset System Button
-    this.elements.btnReset.addEventListener("click", () => {
-      const confirmReset = window.confirm(
-        "WARNING // TERMINATION PROTOCOL:\nAre you sure you want to reset all operative data back to factory state?"
-      );
-      if (confirmReset) {
-        Storage.reset();
+    // Reset button
+    this.elements.btnReset.addEventListener("click", async () => {
+      if (window.confirm("WARNING // RESET PROTOCOL: Revert all data back to factory defaults?")) {
+        await Storage.reset();
         this.renderAll();
-        this.showToast("SYSTEM PURGED: Operative profile reset to factory default.", true);
+        this.showToast("SYSTEM PURGED: Reset complete.", true);
+      }
+    });
+
+    // Modal Triggers
+    this.elements.btnAuthToggle.addEventListener("click", () => {
+      if (currentUser) {
+        AuthService.signOut();
+      } else {
+        this.elements.authErrorMsg.textContent = "";
+        this.elements.authModal.classList.add("active");
+      }
+    });
+
+    this.elements.modalClose.addEventListener("click", () => {
+      this.elements.authModal.classList.remove("active");
+    });
+
+    // Sign In Button
+    this.elements.btnSubmitLogin.addEventListener("click", async () => {
+      const email = this.elements.authEmail.value.trim();
+      const password = this.elements.authPassword.value;
+      if (!email || !password) return;
+
+      this.elements.authErrorMsg.textContent = "Connecting to Neural Link...";
+      const { data, error } = await AuthService.signIn(email, password);
+
+      if (error) {
+        this.elements.authErrorMsg.textContent = `ERROR: ${error.message}`;
+      } else {
+        this.elements.authModal.classList.remove("active");
+        this.showToast(`ACCESS GRANTED: Welcome, Operative.`);
+      }
+    });
+
+    // Register Button
+    this.elements.btnSubmitSignup.addEventListener("click", async () => {
+      const email = this.elements.authEmail.value.trim();
+      const password = this.elements.authPassword.value;
+      if (!email || !password) return;
+
+      this.elements.authErrorMsg.textContent = "Registering new operative...";
+      const { data, error } = await AuthService.signUp(email, password);
+
+      if (error) {
+        this.elements.authErrorMsg.textContent = `ERROR: ${error.message}`;
+      } else {
+        this.elements.authModal.classList.remove("active");
+        this.showToast(`OPERATIVE REGISTERED: Linked to cloud.`);
       }
     });
   },
 
-  init() {
-    // Attempt to load from storage
-    const loaded = Storage.load();
-    if (loaded) {
-      console.log("CYBERQUEST // Existing operative save profile loaded.");
-    }
-
+  async init() {
     this.initListeners();
+    await Storage.load();
     this.renderAll();
-    console.log("CYBERQUEST // System Fully Initialized.");
+    await AuthService.init();
+    console.log("CYBERQUEST // Fullstack Operative HUD Online.");
   }
 };
 
-// Boot application when DOM is ready
+// Boot
 document.addEventListener("DOMContentLoaded", () => {
   UIController.init();
 });
