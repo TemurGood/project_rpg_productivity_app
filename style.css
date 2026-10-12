@@ -645,3 +645,31 @@ body {
   font-size: 0.75rem;
   border-radius: 2px;
 }
+
+/* --- STEP 6 SYSTEM NOTIFICATIONS --- */
+.system-toast {
+  position: fixed;
+  bottom: 1.5rem;
+  right: 1.5rem;
+  background: #111422;
+  border: 1px solid var(--accent-cyan);
+  box-shadow: var(--glow-cyan);
+  color: #fff;
+  padding: 0.75rem 1.25rem;
+  font-family: var(--font-display);
+  font-size: 0.85rem;
+  z-index: 1000;
+  display: none;
+  animation: slideUp 0.3s ease;
+}
+
+.system-toast.danger {
+  border-color: var(--danger);
+  box-shadow: 0 0 10px rgba(255, 34, 85, 0.5);
+  color: var(--danger);
+}
+
+@keyframes slideUp {
+  from { transform: translateY(20px); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
+}

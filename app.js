@@ -1,22 +1,22 @@
 /**
  * CYBERQUEST - RPG Habit Tracker
- * Architecture: gameState -> RPGSystem -> UIController
+ * Architecture: gameState -> Storage -> RPGSystem -> UIController
  */
 
 // ==========================================
-// 1. STATE MODULE (gameState)
+// DEFAULT STATE TEMPLATE
 // ==========================================
-const gameState = {
+const DEFAULT_STATE = {
   hero: {
     name: "V_OPERATIVE",
     class: "CYBER_MERCENARY",
     level: 1,
     currentXP: 0,
     maxXP: 100,
-    currentHP: 75, // Starting with slight damage to test healing items
+    currentHP: 100,
     maxHP: 100,
-    gold: 60,
-    statPoints: 2,
+    gold: 50,
+    statPoints: 3,
     stats: {
       str: 10,
       int: 10,
@@ -32,7 +32,7 @@ const gameState = {
       xpReward: 25,
       goldReward: 10,
       completed: false,
-      createdAt: Date.now()
+      createdAt: 1700000000000
     },
     {
       id: "demo-quest-2",
@@ -42,14 +42,14 @@ const gameState = {
       xpReward: 50,
       goldReward: 25,
       completed: false,
-      createdAt: Date.now()
+      createdAt: 1700000000001
     }
   ],
   shopItems: [
     {
       id: "synth-stim",
       name: "SYNTH-STIM VIAL",
-      desc: "Restores +30 HP to operative vitals",
+      desc: "Restores +30 HP to vitals",
       price: 20,
       type: "consumable",
       effect: "heal",
@@ -85,7 +85,63 @@ const gameState = {
 };
 
 // ==========================================
-// 2. RPG LOGIC MODULE (RPGSystem)
+// 1. STATE CONTAINER (gameState)
+// ==========================================
+let gameState = JSON.parse(JSON.stringify(DEFAULT_STATE));
+
+// ==========================================
+// 2. STORAGE MODULE (Storage)
+// ==========================================
+const Storage = {
+  KEY: "CYBERQUEST_PROGRESS_DATA_V1",
+
+  save() {
+    try {
+      localStorage.setItem(this.KEY, JSON.stringify(gameState));
+      return true;
+    } catch (err) {
+      console.error("Storage save failed:", err);
+      return false;
+    }
+  },
+
+  load() {
+    try {
+      const serialized = localStorage.getItem(this.KEY);
+      if (!serialized) return false;
+
+      const loaded = JSON.parse(serialized);
+      // Merge with default state structure to prevent missing properties
+      gameState = {
+        ...DEFAULT_STATE,
+        ...loaded,
+        hero: { ...DEFAULT_STATE.hero, ...loaded.hero },
+        quests: loaded.quests || [],
+        inventory: loaded.inventory || [],
+        shopItems: DEFAULT_STATE.shopItems
+      };
+      return true;
+    } catch (err) {
+      console.error("Storage load failed, reverting to default:", err);
+      gameState = JSON.parse(JSON.stringify(DEFAULT_STATE));
+      return false;
+    }
+  },
+
+  reset() {
+    try {
+      localStorage.removeItem(this.KEY);
+      gameState = JSON.parse(JSON.stringify(DEFAULT_STATE));
+      return true;
+    } catch (err) {
+      console.error("Storage reset failed:", err);
+      return false;
+    }
+  }
+};
+
+// ==========================================
+// 3. RPG LOGIC MODULE (RPGSystem)
 // ==========================================
 const RPGSystem = {
   difficultyRewards: {
@@ -119,7 +175,8 @@ const RPGSystem = {
       leveledUp = true;
     }
 
-    UIController.renderHeroProfile();
+    Storage.save();
+    UIController.renderAll();
     return leveledUp;
   },
 
@@ -138,14 +195,15 @@ const RPGSystem = {
       hero.currentHP += (hero.maxHP - oldMax);
     }
 
-    UIController.renderHeroProfile();
+    Storage.save();
+    UIController.renderAll();
     return true;
   },
 
   addGold(amount) {
     gameState.hero.gold += amount;
-    UIController.renderHeroProfile();
-    UIController.renderShop(); // Refresh buttons based on new funds
+    Storage.save();
+    UIController.renderAll();
   },
 
   // Quests
@@ -163,6 +221,7 @@ const RPGSystem = {
     };
 
     gameState.quests.push(newQuest);
+    Storage.save();
     UIController.renderQuests();
   },
 
@@ -173,48 +232,46 @@ const RPGSystem = {
     quest.completed = true;
     this.addXP(quest.xpReward);
     this.addGold(quest.goldReward);
+    Storage.save();
     UIController.renderQuests();
   },
 
   deleteQuest(questId) {
     gameState.quests = gameState.quests.filter(q => q.id !== questId);
+    Storage.save();
     UIController.renderQuests();
   },
 
-  // Shop & Inventory Logic
+  // Shop
   buyItem(itemId) {
     const item = gameState.shopItems.find(i => i.id === itemId);
     if (!item) return;
 
     if (gameState.hero.gold < item.price) {
-      UIController.notify("DEPOT ERROR: Insufficient credits.");
+      UIController.showToast("DEPOT ERROR: Insufficient credits.", true);
       return;
     }
 
-    // Deduct gold
     gameState.hero.gold -= item.price;
 
-    // Apply immediate effect or add to inventory
     if (item.effect === "heal") {
       gameState.hero.currentHP = Math.min(gameState.hero.maxHP, gameState.hero.currentHP + item.amount);
-      UIController.notify(`ACQUIRED: ${item.name} // Healed +${item.amount} HP.`);
+      UIController.showToast(`ACQUIRED: ${item.name} (+${item.amount} HP)`);
     } else if (item.effect === "statPoint") {
       gameState.hero.statPoints += item.amount;
-      UIController.notify(`ACQUIRED: ${item.name} // +${item.amount} Stat Point available.`);
+      UIController.showToast(`ACQUIRED: ${item.name} (+${item.amount} Stat Point)`);
     } else {
-      // Voucher / custom reward
       gameState.inventory.push({ ...item, acquiredAt: Date.now() });
-      UIController.notify(`ACQUIRED VOUCHER: ${item.name} added to inventory.`);
+      UIController.showToast(`ACQUIRED VOUCHER: ${item.name}`);
     }
 
-    UIController.renderHeroProfile();
-    UIController.renderShop();
-    UIController.renderInventory();
+    Storage.save();
+    UIController.renderAll();
   }
 };
 
 // ==========================================
-// 3. UI RENDERING MODULE (UIController)
+// 4. UI RENDERING MODULE (UIController)
 // ==========================================
 const UIController = {
   elements: {
@@ -239,22 +296,27 @@ const UIController = {
     activeQuestList: document.getElementById("quest-list-active"),
     completedQuestList: document.getElementById("quest-list-completed"),
     // Shop
-    shopContainer: document.getElementById("shop-items")
+    shopContainer: document.getElementById("shop-items"),
+    // System Header Buttons
+    btnSave: document.getElementById("btn-save-data"),
+    btnReset: document.getElementById("btn-reset-data")
   },
 
-  notify(message) {
-    let notice = document.querySelector(".depot-notice");
-    if (!notice) {
-      notice = document.createElement("div");
-      notice.className = "depot-notice";
-      this.elements.shopContainer.parentNode.insertBefore(notice, this.elements.shopContainer);
+  showToast(message, isDanger = false) {
+    let toast = document.querySelector(".system-toast");
+    if (!toast) {
+      toast = document.createElement("div");
+      toast.className = "system-toast";
+      document.body.appendChild(toast);
     }
-    notice.textContent = message;
-    notice.style.display = "block";
+
+    toast.textContent = `// ${message}`;
+    toast.className = isDanger ? "system-toast danger" : "system-toast";
+    toast.style.display = "block";
 
     setTimeout(() => {
-      notice.style.display = "none";
-    }, 3500);
+      toast.style.display = "none";
+    }, 3000);
   },
 
   renderHeroProfile() {
@@ -384,6 +446,13 @@ const UIController = {
     }
   },
 
+  renderAll() {
+    this.renderHeroProfile();
+    this.renderQuests();
+    this.renderShop();
+    this.renderInventory();
+  },
+
   initListeners() {
     // Stat allocations
     this.elements.statIncButtons.forEach(button => {
@@ -424,22 +493,44 @@ const UIController = {
     this.elements.activeQuestList.addEventListener("click", handleQuestAction);
     this.elements.completedQuestList.addEventListener("click", handleQuestAction);
 
-    // Shop purchase delegate
+    // Shop Buy
     this.elements.shopContainer.addEventListener("click", (e) => {
       if (e.target.classList.contains("btn-buy")) {
         const itemId = e.target.getAttribute("data-id");
         RPGSystem.buyItem(itemId);
       }
     });
+
+    // Manual Save Button
+    this.elements.btnSave.addEventListener("click", () => {
+      if (Storage.save()) {
+        this.showToast("SYSTEM BACKUP: All progress saved to local storage.");
+      }
+    });
+
+    // Reset System Button
+    this.elements.btnReset.addEventListener("click", () => {
+      const confirmReset = window.confirm(
+        "WARNING // TERMINATION PROTOCOL:\nAre you sure you want to reset all operative data back to factory state?"
+      );
+      if (confirmReset) {
+        Storage.reset();
+        this.renderAll();
+        this.showToast("SYSTEM PURGED: Operative profile reset to factory default.", true);
+      }
+    });
   },
 
   init() {
+    // Attempt to load from storage
+    const loaded = Storage.load();
+    if (loaded) {
+      console.log("CYBERQUEST // Existing operative save profile loaded.");
+    }
+
     this.initListeners();
-    this.renderHeroProfile();
-    this.renderQuests();
-    this.renderShop();
-    this.renderInventory();
-    console.log("CYBERQUEST // System Initialized.");
+    this.renderAll();
+    console.log("CYBERQUEST // System Fully Initialized.");
   }
 };
 
