@@ -514,3 +514,78 @@ body {
   background: var(--accent-amber);
   color: #000;
 }
+
+/* --- STEP 4 QUEST STYLING --- */
+.quest-meta-tags {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.quest-badge {
+  font-size: 0.65rem;
+  font-family: var(--font-display);
+  padding: 0.1rem 0.4rem;
+  border-radius: 2px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.badge-easy {
+  background: rgba(0, 255, 102, 0.15);
+  border: 1px solid var(--accent-green);
+  color: var(--accent-green);
+}
+
+.badge-medium {
+  background: rgba(0, 240, 255, 0.15);
+  border: 1px solid var(--accent-cyan);
+  color: var(--accent-cyan);
+}
+
+.badge-hard {
+  background: rgba(255, 0, 85, 0.15);
+  border: 1px solid var(--accent-magenta);
+  color: var(--accent-magenta);
+}
+
+.badge-cat {
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--text-muted);
+  color: var(--text-muted);
+}
+
+.quest-rewards {
+  font-size: 0.75rem;
+  color: var(--accent-amber);
+}
+
+.btn-quest-action {
+  background: transparent;
+  padding: 0.35rem 0.65rem;
+  font-size: 0.75rem;
+  border-radius: 2px;
+  cursor: pointer;
+  transition: all 0.2s;
+  font-family: var(--font-display);
+}
+
+.btn-complete {
+  border: 1px solid var(--accent-green);
+  color: var(--accent-green);
+}
+
+.btn-complete:hover {
+  background: var(--accent-green);
+  color: #000;
+}
+
+.btn-delete {
+  border: 1px solid var(--danger);
+  color: var(--danger);
+}
+
+.btn-delete:hover {
+  background: var(--danger);
+  color: #fff;
+}
