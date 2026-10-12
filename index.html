@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>CYBERQUEST // Operative HUD</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@500;700;900&family=Rajdhani:wght@500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div class="scanline-overlay"></div>
+
+  <div class="hud-container">
+    <!-- Top Bar: Hero Header & System Controls -->
+    <header class="hud-header panel">
+      <div class="brand">
+        <span class="glitch-title" data-text="CYBERQUEST">CYBERQUEST</span>
+        <span class="system-tag">v1.0.0 // PROTOCOL_ONLINE</span>
+      </div>
+      <div class="system-actions">
+        <button id="btn-save-data" class="btn btn-secondary">SAVE</button>
+        <button id="btn-reset-data" class="btn btn-danger">RESET SYSTEM</button>
+      </div>
+    </header>
+
+    <!-- Main Grid Dashboard -->
+    <main class="hud-grid">
+      <!-- Section 1: Hero Identity & Core Stats -->
+      <section class="panel hero-profile" aria-label="Hero Profile">
+        <div class="panel-header">
+          <h2>OPERATIVE PROFILE</h2>
+          <span class="status-indicator">STATUS: ACTIVE</span>
+        </div>
+        
+        <div class="hero-identity">
+          <div class="avatar-frame">
+            <div class="avatar-placeholder">⚔️</div>
+          </div>
+          <div class="identity-info">
+            <h3 id="hero-name">V_OPERATIVE</h3>
+            <span class="badge" id="hero-class">CYBER_MERCENARY</span>
+          </div>
+        </div>
+
+        <div class="vitals">
+          <!-- Level & XP -->
+          <div class="vital-row">
+            <div class="vital-label">
+              <span>LEVEL <strong id="hero-level">1</strong></span>
+              <span id="hero-xp-label">0 / 100 XP</span>
+            </div>
+            <div class="progress-bar-wrap">
+              <div class="progress-bar xp-bar" id="hero-xp-bar" style="width: 0%;"></div>
+            </div>
+          </div>
+
+          <!-- HP Bar -->
+          <div class="vital-row">
+            <div class="vital-label">
+              <span>HEALTH</span>
+              <span id="hero-hp-label">100 / 100 HP</span>
+            </div>
+            <div class="progress-bar-wrap">
+              <div class="progress-bar hp-bar" id="hero-hp-bar" style="width: 100%;"></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Currency & Unallocated Stats -->
+        <div class="hero-currency">
+          <div class="currency-card">
+            <span class="currency-label">CREDITS (GOLD)</span>
+            <span class="currency-value" id="hero-gold">⬡ 0</span>
+          </div>
+          <div class="currency-card">
+            <span class="currency-label">STAT POINTS</span>
+            <span class="currency-value" id="hero-stat-points">0</span>
+          </div>
+        </div>
+
+        <!-- Attributes Panel -->
+        <div class="attributes-block">
+          <h4>ATTRIBUTES</h4>
+          <ul class="stats-list">
+            <li>
+              <span>STRENGTH (STR)</span>
+              <div class="stat-controls">
+                <span id="stat-str">10</span>
+                <button class="btn-stat-inc" data-stat="str">+</button>
+              </div>
+            </li>
+            <li>
+              <span>INTELLIGENCE (INT)</span>
+              <div class="stat-controls">
+                <span id="stat-int">10</span>
+                <button class="btn-stat-inc" data-stat="int">+</button>
+              </div>
+            </li>
+            <li>
+              <span>AGILITY (AGI)</span>
+              <div class="stat-controls">
+                <span id="stat-agi">10</span>
+                <button class="btn-stat-inc" data-stat="agi">+</button>
+              </div>
+            </li>
+          </ul>
+        </div>
+      </section>
+
+      <!-- Section 2: Quest & Bounty Board -->
+      <section class="panel quest-board" aria-label="Quest Board">
+        <div class="panel-header">
+          <h2>ACTIVE BOUNTIES & QUESTS</h2>
+          <span class="sub-text">DAILY DIRECTIVES</span>
+        </div>
+
+        <!-- Quest Input Form -->
+        <form id="quest-form" class="quest-form">
+          <div class="form-row">
+            <input 
+              type="text" 
+              id="quest-title" 
+              placeholder="Deploy new directive..." 
+              required 
+              autocomplete="off"
+            />
+          </div>
+          <div class="form-row form-meta">
+            <select id="quest-difficulty">
+              <option value="easy">Rank E (Easy) - 25 XP / 10 ⬡</option>
+              <option value="medium" selected>Rank B (Medium) - 50 XP / 25 ⬡</option>
+              <option value="hard">Rank S (Hard) - 100 XP / 60 ⬡</option>
+            </select>
+            <select id="quest-category">
+              <option value="fitness">Fitness (STR)</option>
+              <option value="knowledge">Study (INT)</option>
+              <option value="discipline">Agility (AGI)</option>
+              <option value="routine">Routine</option>
+            </select>
+            <button type="submit" class="btn btn-primary">+ DISPATCH</button>
+          </div>
+        </form>
+
+        <!-- Quest List -->
+        <div class="quest-sections">
+          <h3>PENDING OPERATIONS</h3>
+          <ul id="quest-list-active" class="quest-list">
+            <li class="quest-item empty-state">No active contracts found. Deploy one above.</li>
+          </ul>
+
+          <h3>COMPLETED LOG</h3>
+          <ul id="quest-list-completed" class="quest-list completed-list">
+            <!-- Completed items populate here -->
+          </ul>
+        </div>
+      </section>
+
+      <!-- Section 3: Supply Depot / Black Market -->
+      <section class="panel supply-depot" aria-label="Supply Depot">
+        <div class="panel-header">
+          <h2>BLACK MARKET DEPOT</h2>
+          <span class="sub-text">EXCHANGE CREDITS</span>
+        </div>
+
+        <div class="shop-grid" id="shop-items">
+          <!-- Sample shop cards (wired dynamically in Step 5) -->
+          <article class="shop-card">
+            <div class="shop-card-info">
+              <h4>SYNTH-STIM VIAL</h4>
+              <p>Restores 25 HP</p>
+            </div>
+            <div class="shop-card-action">
+              <span class="price">⬡ 20</span>
+              <button class="btn btn-buy">BUY</button>
+            </div>
+          </article>
+
+          <article class="shop-card">
+            <div class="shop-card-info">
+              <h4>NEURAL OVERCLOCK</h4>
+              <p>+1 Stat Point instantly</p>
+            </div>
+            <div class="shop-card-action">
+              <span class="price">⬡ 75</span>
+              <button class="btn btn-buy">BUY</button>
+            </div>
+          </article>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
