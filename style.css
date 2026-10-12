@@ -589,3 +589,59 @@ body {
   background: var(--danger);
   color: #fff;
 }
+
+/* --- STEP 5 SHOP & FEEDBACK STYLING --- */
+.depot-notice {
+  padding: 0.5rem 0.75rem;
+  margin-bottom: 0.75rem;
+  background: rgba(0, 240, 255, 0.1);
+  border-left: 3px solid var(--accent-cyan);
+  font-size: 0.8rem;
+  color: var(--accent-cyan);
+  display: none;
+  animation: fadeIn 0.3s ease;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.shop-card {
+  position: relative;
+  transition: all 0.2s ease;
+}
+
+.shop-card:hover {
+  border-color: var(--accent-amber);
+}
+
+.btn-buy:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+  border-color: var(--text-muted);
+  color: var(--text-muted);
+  background: transparent;
+}
+
+.inventory-section {
+  margin-top: 1.5rem;
+  border-top: 1px solid var(--bg-panel-border);
+  padding-top: 1rem;
+}
+
+.inventory-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin-top: 0.5rem;
+}
+
+.inv-tag {
+  background: #181b2a;
+  border: 1px solid var(--accent-cyan);
+  color: #fff;
+  padding: 0.2rem 0.5rem;
+  font-size: 0.75rem;
+  border-radius: 2px;
+}

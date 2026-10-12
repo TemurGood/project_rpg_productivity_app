@@ -13,10 +13,10 @@ const gameState = {
     level: 1,
     currentXP: 0,
     maxXP: 100,
-    currentHP: 100,
+    currentHP: 75, // Starting with slight damage to test healing items
     maxHP: 100,
-    gold: 50,
-    statPoints: 3,
+    gold: 60,
+    statPoints: 2,
     stats: {
       str: 10,
       int: 10,
@@ -45,6 +45,42 @@ const gameState = {
       createdAt: Date.now()
     }
   ],
+  shopItems: [
+    {
+      id: "synth-stim",
+      name: "SYNTH-STIM VIAL",
+      desc: "Restores +30 HP to operative vitals",
+      price: 20,
+      type: "consumable",
+      effect: "heal",
+      amount: 30
+    },
+    {
+      id: "neural-overclock",
+      name: "NEURAL OVERCLOCK",
+      desc: "+1 Stat Point permanently",
+      price: 75,
+      type: "consumable",
+      effect: "statPoint",
+      amount: 1
+    },
+    {
+      id: "coffee-ration",
+      name: "ESPRESSO RATION",
+      desc: "Voucher: 1 Guilt-free artisanal coffee break",
+      price: 30,
+      type: "reward",
+      effect: "voucher"
+    },
+    {
+      id: "holonet-pass",
+      name: "HOLONET ACCESS (1 HR)",
+      desc: "Voucher: 1 Hour of gaming or leisure",
+      price: 90,
+      type: "reward",
+      effect: "voucher"
+    }
+  ],
   inventory: []
 };
 
@@ -52,7 +88,6 @@ const gameState = {
 // 2. RPG LOGIC MODULE (RPGSystem)
 // ==========================================
 const RPGSystem = {
-  // Reward table matching difficulty
   difficultyRewards: {
     easy: { xp: 25, gold: 10 },
     medium: { xp: 50, gold: 25 },
@@ -110,9 +145,10 @@ const RPGSystem = {
   addGold(amount) {
     gameState.hero.gold += amount;
     UIController.renderHeroProfile();
+    UIController.renderShop(); // Refresh buttons based on new funds
   },
 
-  // Quest Management Functions
+  // Quests
   createQuest(title, difficulty, category) {
     const rewards = this.difficultyRewards[difficulty] || this.difficultyRewards.medium;
     const newQuest = {
@@ -135,17 +171,45 @@ const RPGSystem = {
     if (!quest || quest.completed) return;
 
     quest.completed = true;
-
-    // Grant rewards
     this.addXP(quest.xpReward);
     this.addGold(quest.goldReward);
-
     UIController.renderQuests();
   },
 
   deleteQuest(questId) {
     gameState.quests = gameState.quests.filter(q => q.id !== questId);
     UIController.renderQuests();
+  },
+
+  // Shop & Inventory Logic
+  buyItem(itemId) {
+    const item = gameState.shopItems.find(i => i.id === itemId);
+    if (!item) return;
+
+    if (gameState.hero.gold < item.price) {
+      UIController.notify("DEPOT ERROR: Insufficient credits.");
+      return;
+    }
+
+    // Deduct gold
+    gameState.hero.gold -= item.price;
+
+    // Apply immediate effect or add to inventory
+    if (item.effect === "heal") {
+      gameState.hero.currentHP = Math.min(gameState.hero.maxHP, gameState.hero.currentHP + item.amount);
+      UIController.notify(`ACQUIRED: ${item.name} // Healed +${item.amount} HP.`);
+    } else if (item.effect === "statPoint") {
+      gameState.hero.statPoints += item.amount;
+      UIController.notify(`ACQUIRED: ${item.name} // +${item.amount} Stat Point available.`);
+    } else {
+      // Voucher / custom reward
+      gameState.inventory.push({ ...item, acquiredAt: Date.now() });
+      UIController.notify(`ACQUIRED VOUCHER: ${item.name} added to inventory.`);
+    }
+
+    UIController.renderHeroProfile();
+    UIController.renderShop();
+    UIController.renderInventory();
   }
 };
 
@@ -173,7 +237,24 @@ const UIController = {
     questDifficultyInput: document.getElementById("quest-difficulty"),
     questCategoryInput: document.getElementById("quest-category"),
     activeQuestList: document.getElementById("quest-list-active"),
-    completedQuestList: document.getElementById("quest-list-completed")
+    completedQuestList: document.getElementById("quest-list-completed"),
+    // Shop
+    shopContainer: document.getElementById("shop-items")
+  },
+
+  notify(message) {
+    let notice = document.querySelector(".depot-notice");
+    if (!notice) {
+      notice = document.createElement("div");
+      notice.className = "depot-notice";
+      this.elements.shopContainer.parentNode.insertBefore(notice, this.elements.shopContainer);
+    }
+    notice.textContent = message;
+    notice.style.display = "block";
+
+    setTimeout(() => {
+      notice.style.display = "none";
+    }, 3500);
   },
 
   renderHeroProfile() {
@@ -208,7 +289,6 @@ const UIController = {
     const activeQuests = gameState.quests.filter(q => !q.completed);
     const completedQuests = gameState.quests.filter(q => q.completed);
 
-    // Render Active Quests
     if (activeQuests.length === 0) {
       this.elements.activeQuestList.innerHTML = `
         <li class="quest-item empty-state">No active contracts found. Deploy one above.</li>
@@ -232,7 +312,6 @@ const UIController = {
       `).join("");
     }
 
-    // Render Completed Quests
     if (completedQuests.length === 0) {
       this.elements.completedQuestList.innerHTML = `
         <li class="quest-item empty-state">No contracts completed yet today.</li>
@@ -255,8 +334,58 @@ const UIController = {
     }
   },
 
+  renderShop() {
+    const heroGold = gameState.hero.gold;
+
+    this.elements.shopContainer.innerHTML = gameState.shopItems.map(item => {
+      const canAfford = heroGold >= item.price;
+      return `
+        <article class="shop-card">
+          <div class="shop-card-info">
+            <h4>${item.name}</h4>
+            <p>${item.desc}</p>
+          </div>
+          <div class="shop-card-action">
+            <span class="price">⬡ ${item.price}</span>
+            <button 
+              class="btn btn-buy" 
+              data-id="${item.id}"
+              ${!canAfford ? "disabled" : ""}
+            >
+              ${canAfford ? "BUY" : "LOCKED"}
+            </button>
+          </div>
+        </article>
+      `;
+    }).join("");
+  },
+
+  renderInventory() {
+    let invContainer = document.getElementById("depot-inventory");
+    if (!invContainer) {
+      const depotSection = document.querySelector(".supply-depot");
+      invContainer = document.createElement("div");
+      invContainer.id = "depot-inventory";
+      invContainer.className = "inventory-section";
+      depotSection.appendChild(invContainer);
+    }
+
+    if (gameState.inventory.length === 0) {
+      invContainer.innerHTML = `
+        <span class="sub-text">OPERATIVE BAG: Empty</span>
+      `;
+    } else {
+      invContainer.innerHTML = `
+        <span class="sub-text">CLAIMED VOUCHERS (${gameState.inventory.length}):</span>
+        <div class="inventory-tags">
+          ${gameState.inventory.map(item => `<span class="inv-tag">🎟️ ${item.name}</span>`).join("")}
+        </div>
+      `;
+    }
+  },
+
   initListeners() {
-    // Stat allocation buttons
+    // Stat allocations
     this.elements.statIncButtons.forEach(button => {
       button.addEventListener("click", (e) => {
         const stat = e.currentTarget.getAttribute("data-stat");
@@ -264,7 +393,7 @@ const UIController = {
       });
     });
 
-    // Form submission for new quests
+    // Add Quest
     this.elements.questForm.addEventListener("submit", (e) => {
       e.preventDefault();
       const title = this.elements.questTitleInput.value.trim();
@@ -277,7 +406,7 @@ const UIController = {
       this.elements.questTitleInput.value = "";
     });
 
-    // Event Delegation for quest actions (Complete / Delete)
+    // Quest actions
     const handleQuestAction = (e) => {
       const target = e.target;
       const action = target.getAttribute("data-action");
@@ -294,12 +423,22 @@ const UIController = {
 
     this.elements.activeQuestList.addEventListener("click", handleQuestAction);
     this.elements.completedQuestList.addEventListener("click", handleQuestAction);
+
+    // Shop purchase delegate
+    this.elements.shopContainer.addEventListener("click", (e) => {
+      if (e.target.classList.contains("btn-buy")) {
+        const itemId = e.target.getAttribute("data-id");
+        RPGSystem.buyItem(itemId);
+      }
+    });
   },
 
   init() {
     this.initListeners();
     this.renderHeroProfile();
     this.renderQuests();
+    this.renderShop();
+    this.renderInventory();
     console.log("CYBERQUEST // System Initialized.");
   }
 };
